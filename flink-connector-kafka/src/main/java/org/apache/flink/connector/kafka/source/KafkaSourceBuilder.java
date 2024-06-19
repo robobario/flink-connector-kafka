@@ -457,28 +457,34 @@ public class KafkaSourceBuilder<OUT> {
         maybeOverride(
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
                 ByteArrayDeserializer.class.getName(),
+                true,
                 true);
         maybeOverride(
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
                 ByteArrayDeserializer.class.getName(),
+                true,
                 true);
         if (!props.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
             LOG.warn(
                     "Offset commit on checkpoint is disabled because {} is not specified",
                     ConsumerConfig.GROUP_ID_CONFIG);
-            maybeOverride(KafkaSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT.key(), "false", false);
+            maybeOverride(
+                    KafkaSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT.key(), "false", false, true);
         }
-        maybeOverride(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false", false);
+        maybeOverride(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false", false, true);
         maybeOverride(
                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
                 startingOffsetsInitializer.getAutoOffsetResetStrategy().name().toLowerCase(),
+                true,
                 true);
 
         // If the source is bounded, do not run periodic partition discovery.
+        boolean isBounded = boundedness == Boundedness.BOUNDED;
         maybeOverride(
                 KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS.key(),
                 "-1",
-                boundedness == Boundedness.BOUNDED);
+                isBounded,
+                isBounded);
 
         // If the client id prefix is not set, reuse the consumer group id as the client id prefix,
         // or generate a random string if consumer group id is not specified.
@@ -487,25 +493,25 @@ public class KafkaSourceBuilder<OUT> {
                 props.containsKey(ConsumerConfig.GROUP_ID_CONFIG)
                         ? props.getProperty(ConsumerConfig.GROUP_ID_CONFIG)
                         : "KafkaSource-" + new Random().nextLong(),
-                false);
+                false,
+                true);
     }
 
-    private boolean maybeOverride(String key, String value, boolean override) {
-        boolean overridden = false;
+    private void maybeOverride(
+            String key, String value, boolean overrideUserValue, boolean overrideIfUnset) {
         String userValue = props.getProperty(key);
         if (userValue != null) {
-            if (override) {
+            if (overrideUserValue) {
                 LOG.warn(
                         String.format(
                                 "Property %s is provided but will be overridden from %s to %s",
                                 key, userValue, value));
                 props.setProperty(key, value);
-                overridden = true;
             }
-        } else {
+        } else if (overrideIfUnset) {
+            LOG.warn(String.format("Property %s is not provided, setting to %s", key, value));
             props.setProperty(key, value);
         }
-        return overridden;
     }
 
     private void sanityCheck() {

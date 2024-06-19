@@ -17,6 +17,7 @@
 
 package org.apache.flink.connector.kafka.source;
 
+import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.kafka.source.enumerator.subscriber.KafkaSubscriber;
@@ -43,6 +44,65 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /** Tests for {@link KafkaSourceBuilder}. */
 @ExtendWith(TestLoggerExtension.class)
 public class KafkaSourceBuilderTest {
+
+    @Test
+    public void partitionDiscoveryEnabledByDefaultForUnboundedSource() {
+        final KafkaSource<String> kafkaSource = getBasicBuilder().setGroupId("groupId").build();
+        assertThat(kafkaSource.getBoundedness()).isEqualTo(Boundedness.CONTINUOUS_UNBOUNDED);
+        assertThat(
+                        kafkaSource
+                                .getConfiguration()
+                                .get(KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS))
+                .isEqualTo(KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS.defaultValue());
+    }
+
+    @Test
+    public void userDefinedPartitionDiscoveryIntervalUsedForUnboundedSource() {
+        final KafkaSource<String> kafkaSource =
+                getBasicBuilder()
+                        .setGroupId("groupId")
+                        .setProperty(
+                                KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS.key(), "5000")
+                        .build();
+        assertThat(kafkaSource.getBoundedness()).isEqualTo(Boundedness.CONTINUOUS_UNBOUNDED);
+        assertThat(
+                        kafkaSource
+                                .getConfiguration()
+                                .get(KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS))
+                .isEqualTo(5000);
+    }
+
+    @Test
+    public void partitionDiscoveryDisabledForBoundedSource() {
+        final KafkaSource<String> kafkaSource =
+                getBasicBuilder()
+                        .setBounded(OffsetsInitializer.earliest())
+                        .setGroupId("groupId")
+                        .build();
+        assertThat(kafkaSource.getBoundedness()).isEqualTo(Boundedness.BOUNDED);
+        assertThat(
+                        kafkaSource
+                                .getConfiguration()
+                                .get(KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS))
+                .isEqualTo(-1);
+    }
+
+    @Test
+    public void partitionDiscoveryIntervalOverriddenToDisabledForBoundedSource() {
+        final KafkaSource<String> kafkaSource =
+                getBasicBuilder()
+                        .setProperty(
+                                KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS.key(), "5000")
+                        .setBounded(OffsetsInitializer.earliest())
+                        .setGroupId("groupId")
+                        .build();
+        assertThat(kafkaSource.getBoundedness()).isEqualTo(Boundedness.BOUNDED);
+        assertThat(
+                        kafkaSource
+                                .getConfiguration()
+                                .get(KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS))
+                .isEqualTo(-1);
+    }
 
     @Test
     public void testBuildSourceWithGroupId() {
